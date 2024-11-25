@@ -1,13 +1,14 @@
 <script setup lang="ts">
-import Quill from 'quill'
-import { Delta } from 'quill/core'
-import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import Link from '@tiptap/extension-link'
+import { TextAlign } from '@tiptap/extension-text-align'
+import StarterKit from '@tiptap/starter-kit'
+import { EditorContent, useEditor } from '@tiptap/vue-3'
+import { onBeforeUnmount, ref, watch } from 'vue'
 import LinkModal from './components/LinkModal.vue'
-import FileLink from './formats/file-link'
-
-import Link from './formats/link'
-import Span from './formats/span'
-import 'quill/dist/quill.snow.css'
+import { FileLink } from './formats/file-link-tiptap'
+import { Span } from './formats/span-tiptap'
+import { Svg } from './formats/svg-tiptap'
+import { SvgPath } from './formats/svgPath'
 
 const props = defineProps<{
   field: object
@@ -15,22 +16,45 @@ const props = defineProps<{
   value: string
   primaryKey: string
 }>()
+
 const emit = defineEmits(['input'])
 
-export type modalType = 'link' | 'file' | null
+const modal = ref<'link' | 'file' | null>(null)
 
-const editor = ref(null)
-let editorInstance: Quill
-const Parchment = Quill.import('parchment')
-const modal = ref<modalType>(null)
+const editor = useEditor({
+  extensions: [
+    StarterKit,
+    Link.configure({
+      openOnClick: false,
+      HTMLAttributes: {
+        class: 'editor-link',
+      },
+    }),
+    FileLink.configure({
+      openOnClick: false,
+      HTMLAttributes: {
+        class: 'editor-link-type-file',
+      },
+    }),
+    Span,
+    Svg,
+    SvgPath,
+    TextAlign.configure({
+      types: ['heading', 'paragraph'],
+    }),
+  ],
+  onUpdate: ({ editor }) => {
+    emit('input', editor.getHTML())
+  },
+})
 
-Quill.register(FileLink)
-Quill.register(Span)
-Quill.register(Link, true)
-
-// Register button class
-const linkClass = new Parchment.ClassAttributor('link-type', 'ql-link-type', { scope: Parchment.Scope.INLINE })
-Quill.register(linkClass, true)
+watch(() => props.value, (newVal) => {
+  if (editor.value && newVal) {
+    editor.value.commands.setContent(newVal)
+  }
+}, {
+  once: true,
+})
 
 function formatFileSize(bytes: number): string {
   if (bytes === 0)
@@ -41,160 +65,59 @@ function formatFileSize(bytes: number): string {
   return `${Number.parseFloat((bytes / k ** i).toFixed(1))} ${sizes[i]}`
 }
 
-function onSetLink(payload) {
-  const range = editorInstance.getSelection(true)
-  let delta: Delta
-  let cursorPosition: number
-
-  if (payload.type === 'file') {
-    delta = new Delta()
-      .insert('\uFEFF', {
-        'file-download': {
-          url: payload.url.value,
-          title: payload.title.value,
-          filesize: formatFileSize(payload.filesize.value),
-        },
-      })
-  }
-  else {
-    const linkFormat: any = {
-      link: payload.url.value,
-    }
-    if (payload.type === 'button' || payload.type === 'cta') {
-      linkFormat['link-type'] = payload.type
-    }
-    delta = new Delta().insert(payload.title.value, linkFormat)
-  }
-
-  if (range && range.length > 0) {
-    editorInstance.updateContents(
-      new Delta().retain(range.index).delete(range.length).concat(delta),
-      'user',
-    )
-    cursorPosition = range.index
-  }
-  else {
-    cursorPosition = range ? range.index : editorInstance.getLength()
-    editorInstance.updateContents(
-      new Delta().retain(cursorPosition).concat(delta),
-      'user',
-    )
-  }
-
-  editorInstance.setSelection(
-    range ? range.index + delta.length() : cursorPosition + delta.length(),
-    0,
-    'user',
-  )
-
-  cleanFileLinks()
-  modal.value = null
-}
-function getSelectionData() {
-  const range = editorInstance.getSelection(true)
-  if (!range)
-    return null
-
-  const formats = editorInstance.getFormat(range)
-  const text = editorInstance.getText(range.index, range.length)
-
-  return {
-    text,
-    link: formats.link || '',
-    class: formats['link-type'] || '',
-    range,
-  }
-}
-
-function openModal(type: modalType) {
-  const selection = getSelectionData()
-
-  if (!selection?.text && type === 'link') {
-    const cursor = editorInstance.getSelection(true)
-    if (cursor) {
-      const [leaf] = editorInstance.getLeaf(cursor.index)
-      if (leaf && leaf.parent.domNode.tagName === 'A') {
-        const linkLength = leaf.parent.length()
-        editorInstance.setSelection(cursor.index - cursor.offset, linkLength)
-      }
-    }
-  }
-
+function openModal(type: 'link' | 'file') {
   modal.value = type
 }
 
-function cleanFileLinks() {
-  const range = editorInstance.getSelection()
+function onSetLink(payload) {
+  if (!editor.value)
+    return
 
-  editorInstance.root.querySelectorAll('.ql-link-type-file').forEach((link: HTMLElement) => {
-    const nameSpan = link.querySelector('.ql-link-type-file-name')
-    const sizeSpan = link.querySelector('.ql-link-type-file-size')
+  if (payload.type === 'file') {
+    editor.value.chain()
+      .focus()
+      .setFileLink({
+        href: payload.url.value,
+        title: payload.title.value,
+        filesize: formatFileSize(payload.filesize.value),
+      })
+      .run()
+  }
+  else {
+    editor.value.chain()
+      .focus()
+      .setLink({
+        href: payload.url.value,
+        class: payload.type === 'button' ? 'editor-link-type-button' : payload.type === 'cta' ? 'editor-link-type-cta' : '',
+      })
+      .command(({ tr }) => {
+        tr.insertText(payload.title.value)
+        return true
+      })
+      .run()
+  }
 
-    if (nameSpan) {
-      nameSpan.innerHTML = nameSpan.textContent || ''
-    }
-    if (sizeSpan) {
-      sizeSpan.innerHTML = sizeSpan.textContent || ''
-    }
+  modal.value = null
+}
 
-    // Remove any zero-width spaces
-    link.innerHTML = link.innerHTML.replace(/\uFEFF/g, '')
+function getSelectionData() {
+  if (!editor.value)
+    return null
 
-    // Ensure the link structure is correct
-    const title = link.getAttribute('data-title')
-    const filesize = link.getAttribute('data-filesize')
+  const { from, to } = editor.value.state.selection
+  const text = editor.value.state.doc.textBetween(from, to)
+  const linkMark = editor.value.getAttributes('link')
 
-    if (!nameSpan || !sizeSpan) {
-      link.innerHTML = ''
-      const newNameSpan = document.createElement('span')
-      newNameSpan.className = 'ql-link-type-file-name'
-      newNameSpan.textContent = title || ''
-
-      const newSizeSpan = document.createElement('span')
-      newSizeSpan.className = 'ql-link-type-file-size'
-      newSizeSpan.textContent = filesize || ''
-
-      link.appendChild(newNameSpan)
-      link.appendChild(newSizeSpan)
-    }
-  })
-
-  if (range) {
-    editorInstance.setSelection(range)
+  return {
+    text,
+    link: linkMark.href || '',
+    class: linkMark.class || '',
+    range: { from, to },
   }
 }
 
-const onEditorChanges = () => emit('input', editorInstance.root.innerHTML)
-
-onMounted(() => {
-  if (editor.value) {
-    editorInstance = new Quill(`#editor-${props.field}-${props.primaryKey}`, {
-      modules: {
-        toolbar: `#toolbar-${props.field}-${props.primaryKey}`,
-      },
-      theme: 'snow',
-    })
-
-    editorInstance.on('editor-change', onEditorChanges)
-
-    cleanFileLinks()
-
-    if (props.value) {
-      editorInstance.root.innerHTML = props.value
-    }
-  }
-})
-
 onBeforeUnmount(() => {
-  editorInstance.off('editor-change', onEditorChanges)
-})
-
-watch(() => props.value, (newValue) => {
-  if (editorInstance && newValue !== editorInstance.root.innerHTML) {
-    editorInstance.root.innerHTML = newValue
-
-    cleanFileLinks()
-  }
+  editor.value?.destroy()
 })
 </script>
 
@@ -208,68 +131,165 @@ watch(() => props.value, (newValue) => {
       @set-link="onSetLink"
     />
   </VOverlay>
-  <div :id="`toolbar-${field}-${primaryKey}`">
-    <span class="ql-formats">
-      <select class="ql-size">
-        <option value="small">Small</option>
-        <option
-          value="normal"
-          selected
-        >Normal</option>
-        <option value="large">Large</option>
-      </select>
-    </span>
-    <span class="ql-formats">
-      <button class="ql-bold" />
-      <button class="ql-italic" />
-      <button class="ql-underline" />
-    </span>
-    <span class="ql-formats">
-      <select class="ql-align" />
-    </span>
-    <span class="ql-formats">
+
+  <div class="editor-wrapper">
+    <div class="editor-toolbar">
       <button
-        class="ql-list"
-        value="ordered"
-      />
+        :class="{ 'is-active': editor?.isActive('paragraph') }"
+        @click="editor?.chain().focus().setParagraph().run()"
+      >
+        <i class="ri-paragraph" />
+      </button>
       <button
-        class="ql-list"
-        value="bullet"
-      />
+        :class="{ 'is-active': editor?.isActive('bold') }"
+        @click="editor?.chain().focus().toggleBold().run()"
+      >
+        <i class="ri-bold" />
+      </button>
       <button
-        class="ql-indent"
-        value="-1"
-      />
+        :class="{ 'is-active': editor?.isActive('italic') }"
+        @click="editor?.chain().focus().toggleItalic().run()"
+      >
+        <i class="ri-italic" />
+      </button>
       <button
-        class="ql-indent"
-        value="+1"
-      />
-    </span>
-    <span class="ql-formats">
-      <button class="ql-link" />
-      <button class="ql-clean" />
+        :class="{ 'is-active': editor?.isActive('underline') }"
+        @click="editor?.chain().focus().toggleUnderline().run()"
+      >
+        <i class="ri-underline" />
+      </button>
+      <button
+        :class="{ 'is-active': editor?.isActive('strike') }"
+        @click="editor?.chain().focus().toggleStrike().run()"
+      >
+        <i class="ri-strikethrough" />
+      </button>
+      <span class="editor-separator">|</span>
+      <button
+        :class="{ 'is-active': editor?.isActive('heading', { level: 2 }) }"
+        @click="editor?.chain().focus().toggleHeading({ level: 2 }).run()"
+      >
+        <i class="ri-h-2" />
+      </button>
+      <button
+        :class="{ 'is-active': editor?.isActive('heading', { level: 3 }) }"
+        @click="editor?.chain().focus().toggleHeading({ level: 3 }).run()"
+      >
+        <i class="ri-h-3" />
+      </button>
+      <button
+        :class="{ 'is-active': editor?.isActive('heading', { level: 4 }) }"
+        @click="editor?.chain().focus().toggleHeading({ level: 4 }).run()"
+      >
+        <i class="ri-h-4" />
+      </button>
+      <button
+        :class="{ 'is-active': editor?.isActive('heading', { level: 5 }) }"
+        @click="editor?.chain().focus().toggleHeading({ level: 5 }).run()"
+      >
+        <i class="ri-h-5" />
+      </button>
+      <span class="editor-separator">|</span>
+      <button
+        :class="{ 'is-active': editor?.isActive('bulletList') }"
+        @click="editor?.chain().focus().toggleBulletList().run()"
+      >
+        <i class="ri-list-unordered" />
+      </button>
+      <button
+        :class="{ 'is-active': editor?.isActive('orderedList') }"
+        @click="editor?.chain().focus().toggleOrderedList().run()"
+      >
+        <i class="ri-list-ordered" />
+      </button>
+      <span class="editor-separator">|</span>
+      <button
+        :class="{ 'is-active': editor?.isActive({ textAlign: 'left' }) }"
+        @click="editor?.chain().focus().setTextAlign('left').run()"
+      >
+        <i class="ri-align-left" />
+      </button>
+      <button
+        :class="{ 'is-active': editor?.isActive({ textAlign: 'center' }) }"
+        @click="editor?.chain().focus().setTextAlign('center').run()"
+      >
+        <i class="ri-align-center" />
+      </button>
+      <button
+        :class="{ 'is-active': editor?.isActive({ textAlign: 'right' }) }"
+        @click="editor?.chain().focus().setTextAlign('right').run()"
+      >
+        <i class="ri-align-right" />
+      </button>
+      <button
+        :class="{ 'is-active': editor?.isActive({ textAlign: 'justify' }) }"
+        @click="editor?.chain().focus().setTextAlign('justify').run()"
+      >
+        <i class="ri-align-justify" />
+      </button>
+      <span class="editor-separator">|</span>
       <button @click="openModal('link')">
-        B
+        <i class="ri-link" />
       </button>
       <button @click="openModal('file')">
-        F
+        <i class="ri-file-line" />
       </button>
-    </span>
-  </div>
+    </div>
 
-  <div
-    :id="`editor-${field}-${primaryKey}`"
-    ref="editor"
-  />
+    <EditorContent :editor="editor" />
+  </div>
 </template>
 
 <style>
-.ql-editor {
+@import 'remixicon/fonts/remixicon.css';
+
+.editor-wrapper {
+  border: var(--theme--border-width) solid var(--theme--form--field--input--border-color);
+}
+
+.editor-toolbar {
+  padding: 0.5rem;
+  border-bottom: var(--theme--border-width) solid var(--theme--form--field--input--border-color);
+  background-color: var(--background-subdued);
+  border-radius: var(--theme--border-radius);
+}
+
+.editor-toolbar button {
+  margin-right: 0.5rem;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 5px;
+  font-size: 18px;
+}
+
+.editor-toolbar button:hover {
+  background-color: var(--background-highlight);
+}
+
+.editor-toolbar button.is-active {
+  background-color: var(--foreground-inverted);
+  border-radius: 4px;
+}
+
+.editor-separator {
+  display: inline-block;
+  margin-inline: 1rem;
+  color: var(--theme--form--field--input--border-color);
+}
+
+.ProseMirror {
+  padding: 1rem;
   min-height: 240px;
 }
 
-a.ql-link-type-button,
-a.ql-link-type-cta {
+.editor-link {
+  color: blue;
+  text-decoration: underline;
+}
+
+.editor-link-type-button,
+.editor-link-type-cta {
   display: inline-block;
   text-decoration: none;
   border-radius: 2rem;
@@ -278,32 +298,54 @@ a.ql-link-type-cta {
   margin: 0 4px;
 }
 
-a.ql-link-type-button,
-a.ql-link-type-file {
+.editor-link-type-button {
   background-color: #fff;
   color: #000;
+  border: 1px solid #000;
 }
 
-a.ql-link-type-file {
-  text-decoration: none;
-  display: inline-flex;
-  flex-direction: column;
-  padding: 0.75rem 1rem;
-  border-radius: 0.5rem;
-  border: 2px solid #000;
-}
-
-.ql-link-type-file-name {
-  font-weight: bold;
-}
-
-.ql-link-type-file-size {
-  font-size: 0.8em;
-  color: #666;
-}
-
-a.ql-link-type-cta {
+.editor-link-type-cta {
   background-color: #883457;
   color: white;
+}
+
+.editor-link-type-file {
+  display: inline-flex;
+  padding: 0.75rem 1rem;
+  border-radius: 0.5rem;
+  border: 2px solid var(--theme--foreground);
+  text-decoration: none;
+  color: var(--theme--foreground);
+}
+
+.editor-link-type-file-content {
+  display: flex;
+  flex-direction: column;
+}
+
+.editor-link-type-file-icon {
+  display: block;
+  width: 1rem;
+  height: 1rem;
+}
+
+h1 {
+  font-size: 1.625em
+}
+
+h2 {
+  font-size: 1.375em
+}
+
+h3 {
+  font-size: 1.25em
+}
+
+h4 {
+  font-size: 1.125em
+}
+
+p, ul, ol, pre {
+  line-height: 1.5
 }
 </style>
