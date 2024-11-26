@@ -247,6 +247,11 @@ onBeforeUnmount(() => {
   border: var(--theme--border-width) solid var(--theme--form--field--input--border-color);
 }
 
+.editor-wrapper :where(p, ul, ol, pre):not(:where(.not-prose, .not-prose *)) {
+  margin: 1em 0;
+  line-height: 1.5;
+}
+
 .editor-toolbar {
   padding: 0.5rem;
   border-bottom: var(--theme--border-width) solid var(--theme--form--field--input--border-color);
@@ -281,6 +286,8 @@ onBeforeUnmount(() => {
 .ProseMirror {
   padding: 1rem;
   min-height: 240px;
+  display: flex;
+  flex-direction: column;
 }
 
 .editor-link {
