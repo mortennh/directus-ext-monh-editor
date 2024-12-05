@@ -4,6 +4,7 @@ import { TextAlign } from '@tiptap/extension-text-align'
 import StarterKit from '@tiptap/starter-kit'
 import { EditorContent, useEditor } from '@tiptap/vue-3'
 import { onBeforeUnmount, ref, watch } from 'vue'
+import FormModal from './components/FormModal.vue'
 import LinkModal from './components/LinkModal.vue'
 import { FileLink } from './formats/file-link-tiptap'
 import { Span } from './formats/span-tiptap'
@@ -19,7 +20,7 @@ const props = defineProps<{
 
 const emit = defineEmits(['input'])
 
-const modal = ref<'link' | 'file' | null>(null)
+const modal = ref<'link' | 'file' | 'form' | null>(null)
 
 const editor = useEditor({
   extensions: [
@@ -65,7 +66,7 @@ function formatFileSize(bytes: number): string {
   return `${Number.parseFloat((bytes / k ** i).toFixed(1))} ${sizes[i]}`
 }
 
-function openModal(type: 'link' | 'file') {
+function openModal(type: 'link' | 'file' | 'form') {
   modal.value = type
 }
 
@@ -100,6 +101,29 @@ function onSetLink(payload) {
   modal.value = null
 }
 
+function onSetForm(payload) {
+  if (!editor.value) {
+    return
+  }
+
+  editor.value.chain()
+    .focus()
+    .insertContent({
+      type: 'span',
+      attrs: {
+        'class': 'editor-form-link',
+        'data-form-id': payload.id,
+      },
+      content: [{
+        type: 'text',
+        text: payload.title,
+      }],
+    })
+    .run()
+
+  modal.value = null
+}
+
 function getSelectionData() {
   if (!editor.value)
     return null
@@ -124,11 +148,16 @@ onBeforeUnmount(() => {
 <template>
   <VOverlay :active="modal !== null">
     <LinkModal
-      v-if="modal !== null"
+      v-if="modal !== null && ['link', 'file'].includes(modal)"
       :selection="getSelectionData()"
       :type="modal"
       @cancel="modal = null"
       @set-link="onSetLink"
+    />
+    <FormModal
+      v-if="modal !== null && modal === 'form'"
+      @cancel="modal = null"
+      @set-form="onSetForm"
     />
   </VOverlay>
 
@@ -234,6 +263,12 @@ onBeforeUnmount(() => {
       <button @click="openModal('file')">
         <i class="ri-file-line" />
       </button>
+      <button
+        title="Form"
+        @click="openModal('form')"
+      >
+        <i class="ri-survey-line" />
+      </button>
     </div>
 
     <EditorContent :editor="editor" />
@@ -334,6 +369,12 @@ onBeforeUnmount(() => {
   display: block;
   width: 1rem;
   height: 1rem;
+}
+
+.editor-form-link {
+  background-color: var(--background-normal-alt);
+  padding: 16px;
+  border: var(--theme--border-width) solid var(--theme--border-color)
 }
 
 h1 {

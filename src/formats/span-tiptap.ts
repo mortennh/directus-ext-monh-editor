@@ -11,7 +11,10 @@ export const Span = Node.create({
 
   addAttributes() {
     return {
-      class: {
+      'class': {
+        default: null,
+      },
+      'data-form-id': {
         default: null,
       },
     }
@@ -22,7 +25,8 @@ export const Span = Node.create({
       {
         tag: 'span',
         getAttrs: element => ({
-          class: element.getAttribute('class'),
+          'class': element.getAttribute('class'),
+          'data-form-id': element.getAttribute('data-form-id'),
         }),
       },
     ]
