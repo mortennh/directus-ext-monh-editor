@@ -112,18 +112,22 @@ const allItems = computed(() => {
 query.limit.value = 10 // update query limit
 
 const result = computed(() => {
-  if (allItems.value.length > 0) {
-    return allItems.value.map((item) => {
-      let translation = item.translations[0]
-      if (interfaceValues.value && interfaceValues.value.languages_code) {
-        translation = item.translations.find(translation => translation.languages_code === interfaceValues.value.languages_code.code)
-      }
+  if (!allItems.value?.length)
+    return []
 
-      return translation
-    })
-  }
+  return allItems.value.map((item) => {
+    if (!item?.translations?.length)
+      return null
 
-  return []
+    let translation = item.translations[0]
+    if (interfaceValues.value?.languages_code) {
+      translation = item.translations.find(
+        trans => trans?.languages_code === interfaceValues.value.languages_code.code,
+      ) || translation // Fallback to first translation if no match
+    }
+
+    return translation
+  }).filter(Boolean) // Remove null values
 })
 
 async function fetchItems() {
@@ -151,8 +155,18 @@ async function fetchItems() {
   }
 }
 
+function getLanguagePrefix() {
+  if (!interfaceValues.value?.languages_code?.code)
+    return ''
+
+  return interfaceValues.value.languages_code.code === 'de' ? '' : `/${interfaceValues.value.languages_code.code}`
+}
+
 function onButtonClick(item, index) {
-  linkItem.url.value = `/${allItems.value[index].type}/${item.slug}`
+  if (!item || !allItems.value[index])
+    return
+
+  linkItem.url.value = `${getLanguagePrefix()}/${allItems.value[index].type}/${item.slug}`
   linkItem.title.value = item.headline
 }
 
@@ -268,8 +282,8 @@ onMounted(() => {
             class="list-item-button"
             @click="onButtonClick(item, index)"
           >
-            <span class="list-item-headline">{{ item.headline }}</span>
-            <span class="list-item-type">{{ allItems[index].type }}</span>
+            <span class="list-item-headline">{{ item?.headline }}</span>
+            <span class="list-item-type">{{ allItems[index]?.type }}</span>
           </button>
         </li>
       </ul>

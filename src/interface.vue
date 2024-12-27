@@ -3,7 +3,7 @@ import Link from '@tiptap/extension-link'
 import { TextAlign } from '@tiptap/extension-text-align'
 import StarterKit from '@tiptap/starter-kit'
 import { EditorContent, useEditor } from '@tiptap/vue-3'
-import { onBeforeUnmount, ref, watch } from 'vue'
+import { onBeforeUnmount, onMounted, ref } from 'vue'
 import FormModal from './components/FormModal.vue'
 import LinkModal from './components/LinkModal.vue'
 import { FileLink } from './formats/file-link-tiptap'
@@ -49,12 +49,10 @@ const editor = useEditor({
   },
 })
 
-watch(() => props.value, (newVal) => {
-  if (editor.value && newVal) {
-    editor.value.commands.setContent(newVal)
+onMounted(() => {
+  if (props.value) {
+    editor.value?.commands.setContent(props.value)
   }
-}, {
-  once: true,
 })
 
 function formatFileSize(bytes: number): string {

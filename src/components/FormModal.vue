@@ -38,7 +38,10 @@ onMounted(() => {
     :title="false"
     class="card"
   >
-    <ul class="list">
+    <ul
+      v-if="forms.length"
+      class="list"
+    >
       <li
         v-for="item in forms"
         :key="`form-modal-select-item-${item.id}`"
