@@ -49,20 +49,6 @@ const editor = useEditor({
   },
 })
 
-onMounted(() => {
-  if (props.value) {
-    editor.value?.commands.setContent(props.value)
-  }
-})
-
-watch(() => props.value, (newValue) => {
-  if (newValue) {
-    editor.value?.commands.setContent(newValue)
-  }
-}, {
-  once: true,
-})
-
 function formatFileSize(bytes: number): string {
   if (bytes === 0)
     return '0 Bytes'
@@ -145,6 +131,20 @@ function getSelectionData() {
     range: { from, to },
   }
 }
+
+onMounted(() => {
+  if (props.value) {
+    editor.value?.commands.setContent(props.value)
+  }
+})
+
+watch(() => props.value, (newValue) => {
+  if (newValue) {
+    editor.value?.commands.setContent(newValue)
+  }
+}, {
+  once: true,
+})
 
 onBeforeUnmount(() => {
   editor.value?.destroy()

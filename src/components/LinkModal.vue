@@ -215,8 +215,6 @@ async function onFileUpload() {
 }
 
 onMounted(() => {
-  console.log(props)
-
   if (props.selection) {
     linkItem.url.value = props.selection.link
     linkItem.title.value = props.selection.text
