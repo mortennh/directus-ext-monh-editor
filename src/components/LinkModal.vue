@@ -79,10 +79,16 @@ const collections = {
 
 const query = {
   fields: ref(['*', 'translations.*']),
-  limit: ref(1),
+  limit: ref(-1),
   sort: ref(null),
   search: ref(''),
-  filter: ref(null),
+  filter: ref({
+    translations: {
+      languages_code: {
+        _eq: interfaceValues.value?.languages_code?.code || 'de',
+      },
+    },
+  }),
   page: ref(1),
 }
 
@@ -109,8 +115,6 @@ const allItems = computed(() => {
   return items
 })
 
-query.limit.value = 10 // update query limit
-
 const result = computed(() => {
   if (!allItems.value?.length)
     return []
@@ -131,6 +135,14 @@ const result = computed(() => {
 })
 
 async function fetchItems() {
+  const baseFilter = {
+    translations: {
+      languages_code: {
+        _eq: interfaceValues.value?.languages_code?.code || 'de',
+      },
+    },
+  }
+
   if (q.value && q.value.length > 1) {
     query.filter.value = {
       translations: {
@@ -141,7 +153,7 @@ async function fetchItems() {
     }
   }
   else {
-    query.filter.value = null
+    query.filter.value = baseFilter
   }
 
   try {
@@ -203,6 +215,8 @@ async function onFileUpload() {
 }
 
 onMounted(() => {
+  console.log(props)
+
   if (props.selection) {
     linkItem.url.value = props.selection.link
     linkItem.title.value = props.selection.text
