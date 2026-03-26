@@ -3,8 +3,8 @@ import InterfaceComponent from './interface.vue'
 // import './styles.css';
 
 export default defineInterface({
-  id: 'gbp-editor',
-  name: 'GPB Editor',
+  id: 'monh-editor',
+  name: 'MONH Editor',
   icon: 'edit',
   description: 'Custom Editor for our needs',
   component: InterfaceComponent,

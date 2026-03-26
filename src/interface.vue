@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import Link from '@tiptap/extension-link'
 import { TextAlign } from '@tiptap/extension-text-align'
+import { Underline } from '@tiptap/extension-underline'
 import StarterKit from '@tiptap/starter-kit'
 import { EditorContent, useEditor } from '@tiptap/vue-3'
 import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
@@ -25,6 +26,7 @@ const modal = ref<'link' | 'file' | 'form' | null>(null)
 const editor = useEditor({
   extensions: [
     StarterKit,
+    Underline,
     Link.configure({
       openOnClick: false,
       HTMLAttributes: {
