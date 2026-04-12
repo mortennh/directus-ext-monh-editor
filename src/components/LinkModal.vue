@@ -1,45 +1,38 @@
 <script setup lang="ts">
-import type { modalType } from '../interface.vue'
-import { useApi, useItems } from '@directus/extensions-sdk'
+import type { ModalType } from '../interface.vue'
+import { useApi } from '@directus/extensions-sdk'
 import { useBrowserLocation, useDebounceFn } from '@vueuse/core'
-import { computed, inject, onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 
 const props = defineProps<{
   selection: any
-  type: modalType
+  type: ModalType
+  linkStyles?: string[]
+  currentLang?: string | null
 }>()
+
+const DEFAULT_LANG = 'en-US'
+
+const COLLECTIONS = [
+  { collection: 'projects' },
+  { collection: 'publications' },
+  { collection: 'events' },
+  { collection: 'posts' },
+  { collection: 'pages' },
+  { collection: 'institutions' },
+  { collection: 'jobs' },
+  { collection: 'researcher_of_month' },
+]
 
 const emit = defineEmits<{
   (e: 'cancel'): void
   (e: 'setLink', payload: object): void
 }>()
 
-const interfaceValues = inject('values')
-const location = useBrowserLocation()
-const q = ref('')
-const fileUploadEl = ref(null)
-
 const api = useApi()
-const files = ref([])
+const location = useBrowserLocation()
 
-// Fetch files
-async function fetchFiles() {
-  try {
-    const response = await api.get('/files', {
-      params: {
-        filter: {
-          type: {
-            _ncontains: 'image',
-          },
-        },
-      },
-    })
-    files.value = response.data.data
-  }
-  catch (error) {
-    console.error('Error fetching files:', error)
-  }
-}
+// --- Link form state ---
 
 const linkItem = {
   url: ref(''),
@@ -48,150 +41,148 @@ const linkItem = {
   filesize: ref(0),
 }
 
-const linkStyleChoices = ref([
-  {
-    name: 'default',
-    label: 'Default',
-    checked: linkItem.type.value === 'default',
-  },
-  {
-    name: 'button',
-    label: 'Button',
-    checked: linkItem.type.value === 'button',
-  },
-  {
-    name: 'cta',
-    label: 'CTA Button',
-    checked: linkItem.type.value === 'cta',
-  },
-  {
-    name: 'file',
-    label: 'Filedownload',
-    checked: linkItem.type.value === 'file',
-  },
-])
+// --- Link styles ---
 
-const collections = {
-  pages: ref('pages'),
-  studies: ref('studies'),
-  files: ref('files'),
-}
+const ALL_LINK_STYLES = [
+  { name: 'default', label: 'Default' },
+  { name: 'button', label: 'Button' },
+  { name: 'cta', label: 'CTA Button' },
+  { name: 'file', label: 'File Download' },
+]
 
-const query = {
-  fields: ref(['*', 'translations.*']),
-  limit: ref(-1),
-  sort: ref(null),
-  search: ref(''),
-  filter: ref({
-    translations: {
-      languages_code: {
-        _eq: interfaceValues.value?.languages_code?.code || 'de',
-      },
-    },
-  }),
-  page: ref(1),
-}
-
-const { getItems: getPages, items: pages } = useItems(collections.pages, query)
-const { getItems: getStudies, items: studies } = useItems(collections.studies, query)
-
-const allItems = computed(() => {
-  let items = []
-
-  if (pages.value.length) {
-    items = [...items, ...pages.value.map(item => ({
-      ...item,
-      type: 'page',
-    }))]
-  }
-
-  if (studies.value.length) {
-    items = [...items, ...studies.value.map(item => ({
-      ...item,
-      type: 'study',
-    }))]
-  }
-
-  return items
+const visibleLinkStyles = computed(() => {
+  if (!props.linkStyles || props.linkStyles.length === 0)
+    return ALL_LINK_STYLES
+  // 'file' style is always included when the modal is opened as 'file' type
+  const allowed = new Set([...props.linkStyles, 'file'])
+  return ALL_LINK_STYLES.filter(s => allowed.has(s.name))
 })
 
-const result = computed(() => {
-  if (!allItems.value?.length)
-    return []
+// --- Internal collection search ---
 
-  return allItems.value.map((item) => {
-    if (!item?.translations?.length)
-      return null
+interface CollectionItem {
+  id: string
+  title: string
+  slug: string
+  langCode: string | null
+  _collection: string
+}
 
-    let translation = item.translations[0]
-    if (interfaceValues.value?.languages_code) {
-      translation = item.translations.find(
-        trans => trans?.languages_code === interfaceValues.value.languages_code.code,
-      ) || translation // Fallback to first translation if no match
-    }
+const q = ref('')
+const allItems = ref<CollectionItem[]>([])
+// Language filter — auto-set from prop when available, user can override
+const selectedLang = ref<string | null>(props.currentLang ?? null)
 
-    return translation
-  }).filter(Boolean) // Remove null values
+const availableLangs = computed(() => {
+  const langs = [...new Set(allItems.value.map(i => i.langCode).filter(Boolean))] as string[]
+  return langs.sort()
 })
 
-async function fetchItems() {
-  const baseFilter = {
-    translations: {
-      languages_code: {
-        _eq: interfaceValues.value?.languages_code?.code || 'de',
-      },
-    },
-  }
+const internalItems = computed(() =>
+  selectedLang.value
+    ? allItems.value.filter(i => i.langCode === selectedLang.value || i.langCode === null)
+    : allItems.value,
+)
 
-  if (q.value && q.value.length > 1) {
-    query.filter.value = {
-      translations: {
-        headline: {
-          _contains: q.value,
+async function fetchInternalItems() {
+  const results = await Promise.all(
+    COLLECTIONS.map((col) => {
+      const { collection } = col
+      const titleField = 'title'
+      const slugField = 'slug'
+      const translationsRelation = 'translations'
+
+      if (translationsRelation) {
+        return api.get(`/items/${collection}`, {
+          params: {
+            fields: ['id', `${translationsRelation}.${titleField}`, `${translationsRelation}.${slugField}`, `${translationsRelation}.languages_code`],
+            limit: 50,
+            filter: {
+              _and: [
+                { status: { _eq: 'published' } },
+                ...(q.value ? [{ [translationsRelation]: { [titleField]: { _icontains: q.value } } }] : []),
+              ],
+            },
+          },
+        })
+          .then(r => (r.data.data as any[]).flatMap((item) => {
+            const translations: any[] = item[translationsRelation] ?? []
+            // Return one list entry per translation that has both a slug and a language code
+            return translations
+              .filter(t => t[slugField] && t.languages_code)
+              .map(t => ({
+                id: item.id,
+                title: t[titleField] || '',
+                slug: t[slugField],
+                langCode: t.languages_code as string,
+                _collection: collection,
+              }))
+          }))
+          .catch(() => [])
+      }
+
+      // Direct fields (non-translated collections)
+      return api.get(`/items/${collection}`, {
+        params: {
+          fields: ['id', titleField, slugField],
+          limit: 50,
+          search: q.value || undefined,
+          filter: { status: { _eq: 'published' } },
         },
-      },
-    }
-  }
-  else {
-    query.filter.value = baseFilter
-  }
+      })
+        .then(r => (r.data.data as any[]).map(item => ({
+          id: item.id,
+          title: item[titleField],
+          slug: item[slugField],
+          langCode: null,
+          _collection: collection,
+        })))
+        .catch(() => [])
+    }),
+  )
 
+  allItems.value = results.flat()
+  // Auto-select language when currentLang becomes known (saved translation row)
+  if (props.currentLang && !selectedLang.value)
+    selectedLang.value = props.currentLang
+}
+
+const onSearch = useDebounceFn(fetchInternalItems, 200)
+
+function selectInternalItem(item: CollectionItem) {
+  const isDefault = item.langCode === DEFAULT_LANG
+  const shortLang = item.langCode ? item.langCode.split('-')[0] : null
+  const langPrefix = shortLang && !isDefault ? `/${shortLang}` : ''
+  linkItem.url.value = `${langPrefix}/${item._collection}/${item.slug}`
+  linkItem.title.value = item.title
+}
+
+// --- File browser ---
+
+const fileUploadEl = ref<HTMLInputElement | null>(null)
+const files = ref<any[]>([])
+
+async function fetchFiles() {
   try {
-    await Promise.all([
-      getPages(),
-      getStudies(),
-    ])
+    const response = await api.get('/files', {
+      params: { filter: { type: { _ncontains: 'image' } } },
+    })
+    files.value = response.data.data
   }
   catch (error) {
-    console.log(error)
+    console.error('Error fetching files:', error)
   }
 }
 
-function getLanguagePrefix() {
-  if (!interfaceValues.value?.languages_code?.code)
-    return ''
-
-  return interfaceValues.value.languages_code.code === 'de' ? '' : `/${interfaceValues.value.languages_code.code}`
-}
-
-function onButtonClick(item, index) {
-  if (!item || !allItems.value[index])
-    return
-
-  linkItem.url.value = `${getLanguagePrefix()}/${allItems.value[index].type}/${item.slug}`
-  linkItem.title.value = item.headline
-}
-
-function setFileLink(file) {
+function selectFile(file: any) {
   linkItem.url.value = `${location.value.origin}/assets/${file.id}`
   linkItem.title.value = file.title
   linkItem.filesize.value = file.filesize
+  linkItem.type.value = 'file'
 }
 
-const onSearch = useDebounceFn(fetchItems, 200)
-
 async function onFileUpload() {
-  const file = fileUploadEl.value.files[0]
+  const file = fileUploadEl.value?.files?.[0]
   if (!file)
     return
 
@@ -200,27 +191,26 @@ async function onFileUpload() {
 
   try {
     const response = await api.post('/files', formData, {
-      headers: {
-        'Content-Type': 'multipart/form-data',
-      },
+      headers: { 'Content-Type': 'multipart/form-data' },
     })
-    fileUploadEl.value.value = null
-
+    if (fileUploadEl.value)
+      fileUploadEl.value.value = ''
     files.value.unshift(response.data.data)
-    setFileLink(response.data.data)
+    selectFile(response.data.data)
   }
   catch (error) {
     console.error('Error uploading file:', error)
   }
 }
 
+// --- Init ---
+
 onMounted(() => {
   if (props.selection) {
     linkItem.url.value = props.selection.link
     linkItem.title.value = props.selection.text
   }
-
-  fetchItems()
+  fetchInternalItems()
   fetchFiles()
 })
 </script>
@@ -231,12 +221,13 @@ onMounted(() => {
     class="card"
   >
     <div class="input-group">
-      <label for="link-modal-url-input">Enter an URL</label>
+      <label for="link-modal-url-input">URL</label>
       <input
         id="link-modal-url-input"
         v-model="linkItem.url.value"
         class="card-input"
         type="text"
+        placeholder="https://..."
       >
     </div>
 
@@ -251,56 +242,73 @@ onMounted(() => {
     </div>
 
     <fieldset class="input-group radio-group">
-      <legend>Select a link style</legend>
+      <legend>Link Style</legend>
       <div
-        v-for="(input, inputIndex) in linkStyleChoices"
-        :key="`link-style-choice-${inputIndex}`"
+        v-for="style in visibleLinkStyles"
+        :key="style.name"
         class="input-radio"
       >
-        <label :for="`link-modal-display-${input.name}`">{{ input.label }}</label>
+        <label :for="`link-modal-display-${style.name}`">{{ style.label }}</label>
         <input
-          :id="`link-modal-display-${input.name}`"
-          v-model="linkItem.type"
+          :id="`link-modal-display-${style.name}`"
+          v-model="linkItem.type.value"
           type="radio"
           class="card-radio"
           name="link-display"
-          :value="input.name"
-          :checked="input.checked"
+          :value="style.name"
         >
       </div>
     </fieldset>
 
+    <!-- Internal collection search (link modal only) -->
     <template v-if="type === 'link'">
       <div class="input-group">
-        <h2>Or select from the content</h2>
-        <label for="link-modal-search-input">Search</label>
+        <h2>Or pick from content</h2>
         <input
-          id="link-modal-search-input"
           v-model="q"
           class="card-input"
           type="text"
+          placeholder="Search…"
           @input="onSearch"
         >
       </div>
-
+      <div v-if="availableLangs.length > 1" class="lang-filter">
+        <button
+          :class="{ 'lang-active': selectedLang === null }"
+          @click="selectedLang = null"
+        >
+          All
+        </button>
+        <button
+          v-for="lang in availableLangs"
+          :key="lang"
+          :class="{ 'lang-active': selectedLang === lang }"
+          @click="selectedLang = lang"
+        >
+          {{ lang }}
+        </button>
+      </div>
       <ul class="list">
         <li
-          v-for="(item, index) in result"
-          :key="`link-modal-select-item-${item.slug}`"
+          v-for="item in internalItems"
+          :key="`${item._collection}-${item.id}-${item.langCode}`"
           class="list-item"
-          style="--v-button-width: 100%"
         >
           <button
             class="list-item-button"
-            @click="onButtonClick(item, index)"
+            @click="selectInternalItem(item)"
           >
-            <span class="list-item-headline">{{ item?.headline }}</span>
-            <span class="list-item-type">{{ allItems[index]?.type }}</span>
+            <span class="list-item-headline">{{ item.title }}</span>
+            <span class="list-item-type">{{ item.langCode ?? item._collection }}</span>
           </button>
+        </li>
+        <li v-if="!internalItems.length" class="list-empty">
+          No results
         </li>
       </ul>
     </template>
 
+    <!-- File browser (file modal only) -->
     <template v-else-if="type === 'file'">
       <div class="input-group">
         <label for="link-modal-file-input">Upload a file</label>
@@ -311,48 +319,30 @@ onMounted(() => {
             class="card-input"
             type="file"
           >
-          <VButton
-            :x-small="true"
-            @click="onFileUpload"
-          >
+          <VButton :x-small="true" @click="onFileUpload">
             Upload
           </VButton>
         </div>
       </div>
-      <ul
-        v-if="files"
-        class="list"
-      >
+      <ul v-if="files.length" class="list">
         <li
-          v-for="(file, fileIndex) in files"
-          :key="`file-item-${fileIndex}`"
+          v-for="file in files"
+          :key="file.id"
           class="list-item"
         >
-          <button
-            class="list-item-button"
-            @click="setFileLink(file)"
-          >
-            <span
-              class="list-item-headline"
-              :title="file.title"
-            >{{ file.title }}</span>
+          <button class="list-item-button" @click="selectFile(file)">
+            <span class="list-item-headline" :title="file.title">{{ file.title }}</span>
             <span class="list-item-type">{{ file.type }}</span>
           </button>
         </li>
       </ul>
     </template>
+
     <div class="footer">
-      <VButton
-        :x-small="true"
-        :outlined="true"
-        @click="emit('cancel')"
-      >
+      <VButton :x-small="true" :outlined="true" @click="emit('cancel')">
         Cancel
       </VButton>
-      <VButton
-        :x-small="true"
-        @click="emit('setLink', linkItem)"
-      >
+      <VButton :x-small="true" @click="emit('setLink', linkItem)">
         Add Link
       </VButton>
     </div>
@@ -362,7 +352,6 @@ onMounted(() => {
 <style scoped>
 .card {
   --theme--form--field--input--padding: 0px;
-
   padding: 1rem;
   min-width: 320px;
   width: 100%;
@@ -396,9 +385,14 @@ onMounted(() => {
   background-color: var(--theme--background-accent);
 }
 
-.list-item {
-  text-align: left;
+.list-empty {
+  color: var(--theme--foreground-subdued);
+  font-size: 0.875em;
+  text-align: center;
+  padding: 0.5rem;
 }
+
+.list-item { text-align: left; }
 
 .list-item-button {
   display: flex;
@@ -413,13 +407,9 @@ onMounted(() => {
   max-width: 20ch;
 }
 
-.list-item-button:hover {
-  color: var(--theme--primary);
-}
+.list-item-button:hover { color: var(--theme--primary); }
 
-.list-item:not(:last-child) {
-  border-bottom: 1px solid grey;
-}
+.list-item:not(:last-child) { border-bottom: 1px solid grey; }
 
 .list-item-type {
   text-transform: uppercase;
@@ -434,6 +424,9 @@ onMounted(() => {
 .radio-group {
   display: flex;
   gap: 1rem;
+  border: none;
+  padding: 0;
+  margin-top: 1rem;
 }
 
 .input-radio {
@@ -442,8 +435,31 @@ onMounted(() => {
   gap: 0.25rem;
 }
 
+.lang-filter {
+  display: flex;
+  gap: 0.25rem;
+  margin-top: 0.75rem;
+}
+
+.lang-filter button {
+  font-size: 0.75em;
+  padding: 2px 8px;
+  border: 1px solid var(--theme--border-color, #ccc);
+  border-radius: 999px;
+  background: transparent;
+  cursor: pointer;
+  color: var(--theme--foreground-subdued);
+}
+
+.lang-filter button.lang-active {
+  background: var(--theme--primary);
+  border-color: var(--theme--primary);
+  color: #fff;
+}
+
 .footer {
   display: flex;
   justify-content: space-between;
+  margin-top: 1rem;
 }
 </style>

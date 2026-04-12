@@ -2,34 +2,31 @@
 import { useApi } from '@directus/extensions-sdk'
 import { onMounted, ref } from 'vue'
 
+const props = defineProps<{
+  formCollection?: string
+}>()
+
 const emit = defineEmits<{
   (e: 'cancel'): void
   (e: 'setForm', payload: object): void
 }>()
 
 const api = useApi()
-const forms = ref([])
-const selection = ref(null)
+const forms = ref<{ id: string, title: string }[]>([])
+const selection = ref<{ id: string, title: string } | null>(null)
 
-async function fetchForms() {
+const collection = props.formCollection || 'forms'
+
+onMounted(async () => {
   try {
-    const response = await api.get('/items/forms', {
-      params: {
-        fields: [
-          'id',
-          'title',
-        ],
-      },
+    const response = await api.get(`/items/${collection}`, {
+      params: { fields: ['id', 'title'] },
     })
     forms.value = response.data.data
   }
   catch (error) {
-    console.error('Error fetching forms:', error)
+    console.error(`Error fetching ${collection}:`, error)
   }
-}
-
-onMounted(() => {
-  fetchForms()
 })
 </script>
 
@@ -38,10 +35,7 @@ onMounted(() => {
     :title="false"
     class="card"
   >
-    <ul
-      v-if="forms.length"
-      class="list"
-    >
+    <ul v-if="forms.length" class="list">
       <li
         v-for="item in forms"
         :key="`form-modal-select-item-${item.id}`"
@@ -50,26 +44,23 @@ onMounted(() => {
       >
         <button
           class="list-item-button"
+          :class="{ 'is-selected': selection?.id === item.id }"
           @click="selection = item"
         >
           <span class="list-item-headline">{{ item.title }}</span>
         </button>
       </li>
     </ul>
+    <p v-else class="list-empty">
+      No items found in "{{ collection }}"
+    </p>
 
     <div class="footer">
-      <VButton
-        :x-small="true"
-        :outlined="true"
-        @click="emit('cancel')"
-      >
+      <VButton :x-small="true" :outlined="true" @click="emit('cancel')">
         Cancel
       </VButton>
-      <VButton
-        :x-small="true"
-        @click="emit('setForm', selection)"
-      >
-        add Form
+      <VButton :x-small="true" :disabled="!selection" @click="selection && emit('setForm', selection)">
+        Add Form
       </VButton>
     </div>
   </VCard>
@@ -78,7 +69,6 @@ onMounted(() => {
 <style scoped>
 .card {
   --theme--form--field--input--padding: 0px;
-
   padding: 1rem;
   min-width: 320px;
   width: 100%;
@@ -99,33 +89,38 @@ onMounted(() => {
   background-color: var(--theme--background-accent);
 }
 
-.list-item {
-  text-align: left;
+.list-empty {
+  color: var(--theme--foreground-subdued);
+  font-size: 0.875em;
+  text-align: center;
+  padding: 1rem 0;
 }
+
+.list-item { text-align: left; }
 
 .list-item-button {
   display: flex;
   justify-content: space-between;
   width: 100%;
+  padding: 0.25rem 0;
 }
+
+.list-item-button:hover { color: var(--theme--primary); }
+
+.list-item-button.is-selected { color: var(--theme--primary); font-weight: 600; }
+
+.list-item:not(:last-child) { border-bottom: 1px solid grey; }
 
 .list-item-headline {
   overflow: hidden;
   text-wrap: nowrap;
   text-overflow: ellipsis;
-  max-width: 20ch;
-}
-
-.list-item-button:hover {
-  color: var(--theme--primary);
-}
-
-.list-item:not(:last-child) {
-  border-bottom: 1px solid grey;
+  max-width: 30ch;
 }
 
 .footer {
   display: flex;
   justify-content: space-between;
+  margin-top: 1rem;
 }
 </style>
