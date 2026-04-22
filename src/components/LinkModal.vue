@@ -1,18 +1,47 @@
 <script setup lang="ts">
+/**
+ * LinkModal — overlay for inserting/editing links and file downloads
+ *
+ * Two modes driven by the `type` prop:
+ *   'link' → URL input + link-style picker + internal content search + lang filter
+ *   'file' → URL input + link-style picker + file upload/selection from Directus
+ */
 import type { ModalType } from '../interface.vue'
 import { useApi } from '@directus/extensions-sdk'
 import { useBrowserLocation, useDebounceFn } from '@vueuse/core'
 import { computed, onMounted, ref } from 'vue'
 
+// ---------------------------------------------------------------------------
+// Props & emits
+// ---------------------------------------------------------------------------
+
 const props = defineProps<{
+  /** Pre-filled selection data from the editor (text + existing link attrs) */
   selection: any
+  /** Modal variant: 'link' for internal/external, 'file' for file downloads */
   type: ModalType
+  /** Allowed link style radio options (from field config) */
   linkStyles?: string[]
+  /** Current translation language code (from parent translations row) */
   currentLang?: string | null
 }>()
 
+const emit = defineEmits<{
+  (e: 'cancel'): void
+  (e: 'setLink', payload: object): void
+}>()
+
+// ---------------------------------------------------------------------------
+// Constants
+// ---------------------------------------------------------------------------
+
+const api = useApi()
+const location = useBrowserLocation()
+
+/** Default language code — links in this language omit the prefix */
 const DEFAULT_LANG = 'en-US'
 
+/** Directus collections to search for internal linking */
 const COLLECTIONS = [
   { collection: 'projects' },
   { collection: 'publications' },
@@ -24,15 +53,9 @@ const COLLECTIONS = [
   { collection: 'researcher_of_month' },
 ]
 
-const emit = defineEmits<{
-  (e: 'cancel'): void
-  (e: 'setLink', payload: object): void
-}>()
-
-const api = useApi()
-const location = useBrowserLocation()
-
-// --- Link form state ---
+// ---------------------------------------------------------------------------
+// Link form state
+// ---------------------------------------------------------------------------
 
 const linkItem = {
   url: ref(''),
@@ -41,7 +64,9 @@ const linkItem = {
   filesize: ref(0),
 }
 
-// --- Link styles ---
+// ---------------------------------------------------------------------------
+// Link style radio options
+// ---------------------------------------------------------------------------
 
 const ALL_LINK_STYLES = [
   { name: 'default', label: 'Default' },
@@ -50,6 +75,7 @@ const ALL_LINK_STYLES = [
   { name: 'file', label: 'File Download' },
 ]
 
+/** Filter visible styles based on the field-level `linkStyles` config */
 const visibleLinkStyles = computed(() => {
   if (!props.linkStyles || props.linkStyles.length === 0)
     return ALL_LINK_STYLES
@@ -58,7 +84,9 @@ const visibleLinkStyles = computed(() => {
   return ALL_LINK_STYLES.filter(s => allowed.has(s.name))
 })
 
-// --- Internal collection search ---
+// ---------------------------------------------------------------------------
+// Internal collection search (link mode only)
+// ---------------------------------------------------------------------------
 
 interface CollectionItem {
   id: string
@@ -70,20 +98,26 @@ interface CollectionItem {
 
 const q = ref('')
 const allItems = ref<CollectionItem[]>([])
-// Language filter — auto-set from prop when available, user can override
 const selectedLang = ref<string | null>(props.currentLang ?? null)
 
+/** Unique language codes found across all fetched items */
 const availableLangs = computed(() => {
   const langs = [...new Set(allItems.value.map(i => i.langCode).filter(Boolean))] as string[]
   return langs.sort()
 })
 
+/** Items filtered by the selected language (or all when no filter) */
 const internalItems = computed(() =>
   selectedLang.value
     ? allItems.value.filter(i => i.langCode === selectedLang.value || i.langCode === null)
     : allItems.value,
 )
 
+/**
+ * Fetch items from all COLLECTIONS in parallel.
+ * Translated collections use the `translations` relation;
+ * non-translated collections query title/slug directly.
+ */
 async function fetchInternalItems() {
   const results = await Promise.all(
     COLLECTIONS.map((col) => {
@@ -92,6 +126,7 @@ async function fetchInternalItems() {
       const slugField = 'slug'
       const translationsRelation = 'translations'
 
+      // Translated collection — one list entry per translation
       if (translationsRelation) {
         return api.get(`/items/${collection}`, {
           params: {
@@ -107,7 +142,6 @@ async function fetchInternalItems() {
         })
           .then(r => (r.data.data as any[]).flatMap((item) => {
             const translations: any[] = item[translationsRelation] ?? []
-            // Return one list entry per translation that has both a slug and a language code
             return translations
               .filter(t => t[slugField] && t.languages_code)
               .map(t => ({
@@ -121,7 +155,7 @@ async function fetchInternalItems() {
           .catch(() => [])
       }
 
-      // Direct fields (non-translated collections)
+      // Non-translated collection — direct fields
       return api.get(`/items/${collection}`, {
         params: {
           fields: ['id', titleField, slugField],
@@ -142,13 +176,19 @@ async function fetchInternalItems() {
   )
 
   allItems.value = results.flat()
+
   // Auto-select language when currentLang becomes known (saved translation row)
   if (props.currentLang && !selectedLang.value)
     selectedLang.value = props.currentLang
 }
 
+/** Debounced search handler */
 const onSearch = useDebounceFn(fetchInternalItems, 200)
 
+/**
+ * Populate the URL and title fields from a selected internal item.
+ * Non-default languages get a /{langCode} prefix.
+ */
 function selectInternalItem(item: CollectionItem) {
   const isDefault = item.langCode === DEFAULT_LANG
   const shortLang = item.langCode ? item.langCode.split('-')[0] : null
@@ -157,11 +197,14 @@ function selectInternalItem(item: CollectionItem) {
   linkItem.title.value = item.title
 }
 
-// --- File browser ---
+// ---------------------------------------------------------------------------
+// File browser (file mode only)
+// ---------------------------------------------------------------------------
 
 const fileUploadEl = ref<HTMLInputElement | null>(null)
 const files = ref<any[]>([])
 
+/** Fetch non-image files from Directus */
 async function fetchFiles() {
   try {
     const response = await api.get('/files', {
@@ -174,6 +217,7 @@ async function fetchFiles() {
   }
 }
 
+/** Populate the URL and title fields from a selected Directus file */
 function selectFile(file: any) {
   linkItem.url.value = `${location.value.origin}/assets/${file.id}`
   linkItem.title.value = file.title
@@ -181,6 +225,7 @@ function selectFile(file: any) {
   linkItem.type.value = 'file'
 }
 
+/** Upload a new file to Directus and auto-select it */
 async function onFileUpload() {
   const file = fileUploadEl.value?.files?.[0]
   if (!file)
@@ -203,9 +248,12 @@ async function onFileUpload() {
   }
 }
 
-// --- Init ---
+// ---------------------------------------------------------------------------
+// Initialisation
+// ---------------------------------------------------------------------------
 
 onMounted(() => {
+  // Pre-fill fields from an existing link selection (e.g. editing a link)
   if (props.selection) {
     linkItem.url.value = props.selection.link
     linkItem.title.value = props.selection.text
@@ -220,6 +268,7 @@ onMounted(() => {
     :title="false"
     class="card"
   >
+    <!-- URL input -->
     <div class="input-group">
       <label for="link-modal-url-input">URL</label>
       <input
@@ -231,6 +280,7 @@ onMounted(() => {
       >
     </div>
 
+    <!-- Link text input -->
     <div class="input-group">
       <label for="link-modal-text-input">Link Text</label>
       <input
@@ -241,6 +291,7 @@ onMounted(() => {
       >
     </div>
 
+    <!-- Link style radio picker -->
     <fieldset class="input-group radio-group">
       <legend>Link Style</legend>
       <div
@@ -260,7 +311,7 @@ onMounted(() => {
       </div>
     </fieldset>
 
-    <!-- Internal collection search (link modal only) -->
+    <!-- Internal collection search (link mode only) -->
     <template v-if="type === 'link'">
       <div class="input-group">
         <h2>Or pick from content</h2>
@@ -272,7 +323,12 @@ onMounted(() => {
           @input="onSearch"
         >
       </div>
-      <div v-if="availableLangs.length > 1" class="lang-filter">
+
+      <!-- Language filter pills -->
+      <div
+        v-if="availableLangs.length > 1"
+        class="lang-filter"
+      >
         <button
           :class="{ 'lang-active': selectedLang === null }"
           @click="selectedLang = null"
@@ -288,6 +344,8 @@ onMounted(() => {
           {{ lang }}
         </button>
       </div>
+
+      <!-- Search results list -->
       <ul class="list">
         <li
           v-for="item in internalItems"
@@ -302,13 +360,16 @@ onMounted(() => {
             <span class="list-item-type">{{ item.langCode ?? item._collection }}</span>
           </button>
         </li>
-        <li v-if="!internalItems.length" class="list-empty">
+        <li
+          v-if="!internalItems.length"
+          class="list-empty"
+        >
           No results
         </li>
       </ul>
     </template>
 
-    <!-- File browser (file modal only) -->
+    <!-- File browser (file mode only) -->
     <template v-else-if="type === 'file'">
       <div class="input-group">
         <label for="link-modal-file-input">Upload a file</label>
@@ -319,30 +380,50 @@ onMounted(() => {
             class="card-input"
             type="file"
           >
-          <VButton :x-small="true" @click="onFileUpload">
+          <VButton
+            :x-small="true"
+            @click="onFileUpload"
+          >
             Upload
           </VButton>
         </div>
       </div>
-      <ul v-if="files.length" class="list">
+      <ul
+        v-if="files.length"
+        class="list"
+      >
         <li
           v-for="file in files"
           :key="file.id"
           class="list-item"
         >
-          <button class="list-item-button" @click="selectFile(file)">
-            <span class="list-item-headline" :title="file.title">{{ file.title }}</span>
+          <button
+            class="list-item-button"
+            @click="selectFile(file)"
+          >
+            <span
+              class="list-item-headline"
+              :title="file.title"
+            >{{ file.title }}</span>
             <span class="list-item-type">{{ file.type }}</span>
           </button>
         </li>
       </ul>
     </template>
 
+    <!-- Footer actions -->
     <div class="footer">
-      <VButton :x-small="true" :outlined="true" @click="emit('cancel')">
+      <VButton
+        :x-small="true"
+        :outlined="true"
+        @click="emit('cancel')"
+      >
         Cancel
       </VButton>
-      <VButton :x-small="true" @click="emit('setLink', linkItem)">
+      <VButton
+        :x-small="true"
+        @click="emit('setLink', linkItem)"
+      >
         Add Link
       </VButton>
     </div>
@@ -371,6 +452,7 @@ onMounted(() => {
   margin-top: 1rem;
 }
 
+/* Scrollable results list */
 .list {
   display: flex;
   list-style: none;
@@ -416,11 +498,13 @@ onMounted(() => {
   font-size: 0.75em;
 }
 
+/* File upload row */
 .input-upload {
   display: flex;
   gap: 0.5rem;
 }
 
+/* Link style radio buttons */
 .radio-group {
   display: flex;
   gap: 1rem;
@@ -435,6 +519,7 @@ onMounted(() => {
   gap: 0.25rem;
 }
 
+/* Language filter pills */
 .lang-filter {
   display: flex;
   gap: 0.25rem;

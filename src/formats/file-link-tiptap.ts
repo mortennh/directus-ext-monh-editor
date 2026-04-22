@@ -1,34 +1,29 @@
+/**
+ * FileLink — TipTap node for file-download links
+ *
+ * Renders as an <a data-file-link> containing an SVG document icon plus
+ * a title/filesize span pair. The `setFileLink` command inserts the
+ * complete structure (SVG icon + text content) in a single transaction.
+ */
 import { mergeAttributes, Node } from '@tiptap/core'
 
 export const FileLink = Node.create({
   name: 'fileLink',
 
   group: 'inline',
-
   inline: true,
-
   content: 'inline*',
 
   addAttributes() {
     return {
-      href: {
-        default: null,
-      },
-      title: {
-        default: null,
-      },
-      filesize: {
-        default: null,
-      },
+      href: { default: null },
+      title: { default: null },
+      filesize: { default: null },
     }
   },
 
   parseHTML() {
-    return [
-      {
-        tag: 'a[data-file-link]',
-      },
-    ]
+    return [{ tag: 'a[data-file-link]' }]
   },
 
   renderHTML({ HTMLAttributes }) {
@@ -37,12 +32,18 @@ export const FileLink = Node.create({
 
   addCommands() {
     return {
+      /**
+       * Insert a file-download link with an inline SVG icon and
+       * title/size metadata. Called from the LinkModal when the user
+       * picks or uploads a file.
+       */
       setFileLink: attributes => ({ chain }) => {
         return chain()
           .insertContent({
             type: this.name,
             attrs: attributes,
             content: [
+              // SVG document icon
               {
                 type: 'svg',
                 attrs: {
@@ -60,6 +61,7 @@ export const FileLink = Node.create({
                   },
                 ],
               },
+              // File title and size
               {
                 type: 'span',
                 attrs: { class: 'editor-link-type-file-content' },

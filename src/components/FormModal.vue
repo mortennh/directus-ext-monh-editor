@@ -1,8 +1,16 @@
 <script setup lang="ts">
+/**
+ * FormModal — picker overlay for inserting a form-link embed
+ *
+ * Fetches items from a configurable Directus collection (default: "forms")
+ * and emits the selected item back to the editor, which inserts it as
+ * a <span class="editor-form-link" data-form-id="…"> node.
+ */
 import { useApi } from '@directus/extensions-sdk'
 import { onMounted, ref } from 'vue'
 
 const props = defineProps<{
+  /** Directus collection to query (defaults to "forms") */
   formCollection?: string
 }>()
 
@@ -15,12 +23,14 @@ const api = useApi()
 const forms = ref<{ id: string, title: string }[]>([])
 const selection = ref<{ id: string, title: string } | null>(null)
 
+/** Resolved collection name */
 const collection = props.formCollection || 'forms'
 
+/** Fetch available forms on mount */
 onMounted(async () => {
   try {
     const response = await api.get(`/items/${collection}`, {
-      params: { fields: ['id', 'title'] },
+      params: { fields: ['id', 'name'] },
     })
     forms.value = response.data.data
   }
@@ -35,7 +45,11 @@ onMounted(async () => {
     :title="false"
     class="card"
   >
-    <ul v-if="forms.length" class="list">
+    <!-- Item list -->
+    <ul
+      v-if="forms.length"
+      class="list"
+    >
       <li
         v-for="item in forms"
         :key="`form-modal-select-item-${item.id}`"
@@ -47,19 +61,31 @@ onMounted(async () => {
           :class="{ 'is-selected': selection?.id === item.id }"
           @click="selection = item"
         >
-          <span class="list-item-headline">{{ item.title }}</span>
+          <span class="list-item-headline">{{ item.name }}</span>
         </button>
       </li>
     </ul>
-    <p v-else class="list-empty">
+    <p
+      v-else
+      class="list-empty"
+    >
       No items found in "{{ collection }}"
     </p>
 
+    <!-- Footer actions -->
     <div class="footer">
-      <VButton :x-small="true" :outlined="true" @click="emit('cancel')">
+      <VButton
+        :x-small="true"
+        :outlined="true"
+        @click="emit('cancel')"
+      >
         Cancel
       </VButton>
-      <VButton :x-small="true" :disabled="!selection" @click="selection && emit('setForm', selection)">
+      <VButton
+        :x-small="true"
+        :disabled="!selection"
+        @click="selection && emit('setForm', selection)"
+      >
         Add Form
       </VButton>
     </div>
@@ -75,6 +101,7 @@ onMounted(async () => {
   max-width: 600px;
 }
 
+/* Scrollable list of form items */
 .list {
   display: flex;
   list-style: none;

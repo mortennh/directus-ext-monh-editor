@@ -1,3 +1,16 @@
+/**
+ * MONH Editor — Directus interface extension
+ *
+ * A TipTap-based rich-text editor for the TRR 266 project with support for:
+ * - Standard text formatting (bold, italic, underline, strikethrough)
+ * - Headings (H2–H5)
+ * - Lists (bullet, ordered)
+ * - Text alignment
+ * - Internal links (with auto-slug resolution and language prefix)
+ * - File download links (with file upload/selection)
+ * - Form embed links (dynamic collection picker)
+ * - Configurable toolbar and link styles via field options
+ */
 import { defineInterface } from '@directus/extensions-sdk'
 import InterfaceComponent from './interface.vue'
 
@@ -5,11 +18,14 @@ export default defineInterface({
   id: 'monh-editor',
   name: 'MONH Editor',
   icon: 'edit',
-  description: 'Custom Editor for our needs',
+  description: 'TipTap rich-text editor with internal linking, file downloads and form embeds',
   component: InterfaceComponent,
   types: ['text'],
+
+  // --- Field options (configurable in Directus data model settings) ---
   options: [
     {
+      // Which toolbar buttons to display. Empty = show all.
       field: 'toolbar',
       name: 'Toolbar Controls',
       type: 'json',
@@ -42,6 +58,7 @@ export default defineInterface({
       },
     },
     {
+      // Which link style radio options to offer in the link modal.
       field: 'linkStyles',
       name: 'Link Styles',
       type: 'json',
@@ -59,6 +76,7 @@ export default defineInterface({
       },
     },
     {
+      // When checked, internal links omit the /{lang} prefix.
       field: 'disableLangPrefix',
       name: 'Disable Language Prefix',
       type: 'boolean',
@@ -69,6 +87,7 @@ export default defineInterface({
       },
     },
     {
+      // Collection used by the Form modal picker. Defaults to "forms".
       field: 'formCollection',
       name: 'Form Collection',
       type: 'string',

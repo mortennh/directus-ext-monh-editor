@@ -1,19 +1,23 @@
+/**
+ * Svg — TipTap node for inline <svg> elements
+ *
+ * Required so ProseMirror can parse/render the SVG document icon
+ * that lives inside FileLink nodes. Supports class, xmlns, viewBox
+ * and aria-hidden attributes.
+ */
 import { mergeAttributes, Node } from '@tiptap/core'
 
 export const Svg = Node.create({
   name: 'svg',
+
   group: 'inline',
   inline: true,
   content: 'inline*',
 
   addAttributes() {
     return {
-      'class': {
-        default: null,
-      },
-      'xmlns': {
-        default: null,
-      },
+      'class': { default: null },
+      'xmlns': { default: null },
       'viewBox': {
         default: null,
         parseHTML: element => element.getAttribute('viewBox'),
@@ -21,14 +25,10 @@ export const Svg = Node.create({
           if (!attributes.viewBox) {
             return {}
           }
-          return {
-            viewBox: attributes.viewBox,
-          }
+          return { viewBox: attributes.viewBox }
         },
       },
-      'aria-hidden': {
-        default: 'false',
-      },
+      'aria-hidden': { default: 'false' },
     }
   },
 
