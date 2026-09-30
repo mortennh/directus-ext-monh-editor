@@ -45,6 +45,10 @@ const props = defineProps<{
   linkStyles?: string[]
   /** Collection name used by FormModal (defaults to "forms") */
   formCollection?: string
+  /** Collections to search for internal links (defaults to built-in list) */
+  linkCollections?: string[]
+  /** When true, internal links omit the /{lang} prefix */
+  disableLangPrefix?: boolean
 }>()
 
 const emit = defineEmits(['input'])
@@ -265,6 +269,8 @@ function getSelectionData() {
       :type="modal"
       :link-styles="linkStyles"
       :current-lang="lang"
+      :link-collections="linkCollections"
+      :disable-lang-prefix="disableLangPrefix"
       @cancel="modal = null"
       @set-link="onSetLink"
     />

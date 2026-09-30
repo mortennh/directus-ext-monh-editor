@@ -24,6 +24,10 @@ const props = defineProps<{
   linkStyles?: string[]
   /** Current translation language code (from parent translations row) */
   currentLang?: string | null
+  /** Collections to search for internal links (overrides defaults) */
+  linkCollections?: string[]
+  /** When true, internal links omit the /{lang} prefix */
+  disableLangPrefix?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -41,17 +45,23 @@ const location = useBrowserLocation()
 /** Default language code — links in this language omit the prefix */
 const DEFAULT_LANG = 'en-US'
 
-/** Directus collections to search for internal linking */
-const COLLECTIONS = [
-  { collection: 'projects' },
-  { collection: 'publications' },
-  { collection: 'events' },
-  { collection: 'posts' },
-  { collection: 'pages' },
-  { collection: 'institutions' },
-  { collection: 'jobs' },
-  { collection: 'researcher_of_month' },
+/** Default collections to search for internal linking */
+const DEFAULT_COLLECTIONS = [
+  'projects',
+  'publications',
+  'events',
+  'posts',
+  'pages',
+  'institutions',
+  'jobs',
+  'researcher_of_month',
 ]
+
+/** Active collections — from field config or defaults */
+const collections = computed(() => {
+  const list = props.linkCollections?.length ? props.linkCollections : DEFAULT_COLLECTIONS
+  return list.map(c => ({ collection: c }))
+})
 
 // ---------------------------------------------------------------------------
 // Link form state
@@ -125,7 +135,7 @@ const internalItems = computed(() =>
  */
 async function fetchInternalItems() {
   const results = await Promise.all(
-    COLLECTIONS.map((col) => {
+    collections.value.map((col) => {
       const { collection } = col
       const titleField = 'title'
       const slugField = 'slug'
@@ -195,9 +205,12 @@ const onSearch = useDebounceFn(fetchInternalItems, 200)
  * Non-default languages get a /{langCode} prefix.
  */
 function selectInternalItem(item: CollectionItem) {
-  const isDefault = item.langCode === DEFAULT_LANG
-  const shortLang = item.langCode ? item.langCode.split('-')[0] : null
-  const langPrefix = shortLang && !isDefault ? `/${shortLang}` : ''
+  let langPrefix = ''
+  if (!props.disableLangPrefix) {
+    const isDefault = item.langCode === DEFAULT_LANG
+    const shortLang = item.langCode ? item.langCode.split('-')[0] : null
+    langPrefix = shortLang && !isDefault ? `/${shortLang}` : ''
+  }
   linkItem.url.value = `${langPrefix}/${item._collection}/${item.slug}`
   linkItem.title.value = item.title
 }
@@ -334,7 +347,7 @@ onMounted(() => {
 
       <!-- Language filter pills -->
       <div
-        v-if="availableLangs.length > 1"
+        v-if="!disableLangPrefix && availableLangs.length > 1"
         class="lang-filter"
       >
         <button

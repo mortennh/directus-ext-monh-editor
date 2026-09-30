@@ -91,6 +91,20 @@ export default defineInterface({
       },
     },
     {
+      // Collections to search for internal linking in the link modal.
+      field: 'linkCollections',
+      name: 'Link Collections',
+      type: 'json',
+      meta: {
+        interface: 'tags',
+        width: 'full',
+        note: 'Collection names to search for internal links. Type a collection name and press Enter. Leave empty to use defaults (projects, publications, events, posts, pages, institutions, jobs, researcher_of_month).',
+        options: {
+          presets: ['projects', 'publications', 'events', 'posts', 'pages', 'institutions', 'jobs', 'researcher_of_month'],
+        },
+      },
+    },
+    {
       // Collection used by the Form modal picker. Defaults to "forms".
       field: 'formCollection',
       name: 'Form Collection',
