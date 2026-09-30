@@ -75,13 +75,18 @@ const ALL_LINK_STYLES = [
   { name: 'file', label: 'File Download' },
 ]
 
-/** Filter visible styles based on the field-level `linkStyles` config */
+/**
+ * Filter visible styles based on the field-level `linkStyles` config.
+ * The 'file' style is never offered here — file-download links only ever
+ * come from picking/uploading a file in file mode (see `selectFile`, which
+ * forces `linkItem.type` to 'file' directly), so the picker itself is
+ * hidden entirely in file mode rather than listing a single forced option.
+ */
 const visibleLinkStyles = computed(() => {
-  if (!props.linkStyles || props.linkStyles.length === 0)
-    return ALL_LINK_STYLES
-  // 'file' style is always included when the modal is opened as 'file' type
-  const allowed = new Set([...props.linkStyles, 'file'])
-  return ALL_LINK_STYLES.filter(s => allowed.has(s.name))
+  const allowed = props.linkStyles && props.linkStyles.length > 0
+    ? new Set(props.linkStyles)
+    : new Set(ALL_LINK_STYLES.map(s => s.name))
+  return ALL_LINK_STYLES.filter(s => s.name !== 'file' && allowed.has(s.name))
 })
 
 // ---------------------------------------------------------------------------
@@ -291,8 +296,11 @@ onMounted(() => {
       >
     </div>
 
-    <!-- Link style radio picker -->
-    <fieldset class="input-group radio-group">
+    <!-- Link style radio picker (link mode only — file mode always forces the 'file' style via selectFile()) -->
+    <fieldset
+      v-if="type === 'link'"
+      class="input-group radio-group"
+    >
       <legend>Link Style</legend>
       <div
         v-for="style in visibleLinkStyles"

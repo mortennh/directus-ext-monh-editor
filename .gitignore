@@ -1,3 +1,6 @@
 .DS_Store
 node_modules
-/dist/
+# dist/ is committed on purpose: without it Directus can't build its app
+# extensions bundle on a fresh clone and NO custom module/interface shows in
+# the admin. Re-included because the root .gitignore ignores every `dist`.
+!dist/

@@ -3,7 +3,7 @@
  *
  * A TipTap-based rich-text editor for the TRR 266 project with support for:
  * - Standard text formatting (bold, italic, underline, strikethrough)
- * - Headings (H2–H5)
+ * - Headings (H1–H5) with optional serif/sans font and accent-bar styles
  * - Lists (bullet, ordered)
  * - Text alignment
  * - Internal links (with auto-slug resolution and language prefix)
@@ -40,10 +40,14 @@ export default defineInterface({
             { text: 'Italic', value: 'italic' },
             { text: 'Underline', value: 'underline' },
             { text: 'Strikethrough', value: 'strike' },
+            { text: 'Heading 1', value: 'h1' },
             { text: 'Heading 2', value: 'h2' },
             { text: 'Heading 3', value: 'h3' },
             { text: 'Heading 4', value: 'h4' },
             { text: 'Heading 5', value: 'h5' },
+            { text: 'Heading Serif', value: 'fontSerif' },
+            { text: 'Heading Sans', value: 'fontSans' },
+            { text: 'Heading Accent Bar', value: 'headingBar' },
             { text: 'Bullet List', value: 'bulletList' },
             { text: 'Ordered List', value: 'orderedList' },
             { text: 'Align Left', value: 'alignLeft' },

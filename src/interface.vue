@@ -25,11 +25,10 @@ import { computed, getCurrentInstance, onBeforeUnmount, onMounted, ref, watch } 
 import FormModal from './components/FormModal.vue'
 import LinkModal from './components/LinkModal.vue'
 import { FileLink } from './formats/file-link-tiptap'
+import { HeadingStyles } from './formats/heading-styles'
 import { Span } from './formats/span-tiptap'
 import { Svg } from './formats/svg-tiptap'
 import { SvgPath } from './formats/svgPath'
-
-export type ModalType = 'link' | 'file' | 'form'
 
 // ---------------------------------------------------------------------------
 // Props & emits
@@ -49,6 +48,8 @@ const props = defineProps<{
 }>()
 
 const emit = defineEmits(['input'])
+
+export type ModalType = 'link' | 'file' | 'form'
 
 // ---------------------------------------------------------------------------
 // Language detection
@@ -78,7 +79,7 @@ const lang = getTranslationLang()
 
 /** Toolbar groups — used to compute separator visibility */
 const FORMATTING = ['paragraph', 'bold', 'italic', 'underline', 'strike']
-const HEADINGS = ['h2', 'h3', 'h4', 'h5']
+const HEADINGS = ['h1', 'h2', 'h3', 'h4', 'h5', 'fontSerif', 'fontSans', 'headingBar']
 const LISTS = ['bulletList', 'orderedList']
 const ALIGNMENT = ['alignLeft', 'alignCenter', 'alignRight', 'alignJustify']
 const LINKS = ['link', 'fileLink', 'formLink']
@@ -109,6 +110,8 @@ const modal = ref<ModalType | null>(null)
 const editor = useEditor({
   extensions: [
     StarterKit,
+    // Heading visual styles: hl-serif / hl-sans / hl-bar classes
+    HeadingStyles,
     Underline,
     // Standard <a> links (internal/external with class-based styling)
     Link.configure({
@@ -178,7 +181,12 @@ function onSetLink(payload: any) {
   if (!editor.value)
     return
 
-  if (payload.type === 'file') {
+  // `payload` is LinkModal's raw `linkItem` object of individual `ref()`s
+  // (not `reactive()`), so every property here is a Ref — unwrap with
+  // `.value` before comparing, or the comparison silently never matches.
+  const styleType = payload.type.value
+
+  if (styleType === 'file') {
     ;(editor.value.chain().focus() as any).setFileLink({
       href: payload.url.value,
       title: payload.title.value,
@@ -186,18 +194,23 @@ function onSetLink(payload: any) {
     }).run()
   }
   else {
-    const linkClass = payload.type === 'button'
+    const linkClass = styleType === 'button'
       ? 'editor-link-type-button'
-      : payload.type === 'cta'
+      : styleType === 'cta'
         ? 'editor-link-type-cta'
         : ''
 
+    // Insert the label as text carrying the link mark directly — setLink()
+    // alone only applies as a "stored mark" when there's no active
+    // selection, and the previous raw tr.insertText() bypassed stored marks
+    // entirely (a ProseMirror Transaction method, not a TipTap command), so
+    // the inserted text came out as plain unstyled text with no link at all.
     editor.value.chain()
       .focus()
-      .setLink({ href: payload.url.value, class: linkClass })
-      .command(({ tr }) => {
-        tr.insertText(payload.title.value)
-        return true
+      .insertContent({
+        type: 'text',
+        text: payload.title.value,
+        marks: [{ type: 'link', attrs: { href: payload.url.value, class: linkClass } }],
       })
       .run()
   }
@@ -309,6 +322,13 @@ function getSelectionData() {
         class="editor-separator"
       >|</span>
       <button
+        v-if="has('h1')"
+        :class="{ 'is-active': editor?.isActive('heading', { level: 1 }) }"
+        @click="editor?.chain().focus().toggleHeading({ level: 1 }).run()"
+      >
+        <i class="ri-h-1" />
+      </button>
+      <button
         v-if="has('h2')"
         :class="{ 'is-active': editor?.isActive('heading', { level: 2 }) }"
         @click="editor?.chain().focus().toggleHeading({ level: 2 }).run()"
@@ -335,6 +355,33 @@ function getSelectionData() {
         @click="editor?.chain().focus().toggleHeading({ level: 5 }).run()"
       >
         <i class="ri-h-5" />
+      </button>
+      <button
+        v-if="has('fontSerif')"
+        title="Serif heading"
+        :disabled="!editor?.isActive('heading')"
+        :class="{ 'is-active': editor?.isActive('heading', { hlFont: 'serif' }) }"
+        @click="editor?.chain().focus().toggleHeadingFont('serif').run()"
+      >
+        <i class="ri-font-serif" />
+      </button>
+      <button
+        v-if="has('fontSans')"
+        title="Sans heading"
+        :disabled="!editor?.isActive('heading')"
+        :class="{ 'is-active': editor?.isActive('heading', { hlFont: 'sans' }) }"
+        @click="editor?.chain().focus().toggleHeadingFont('sans').run()"
+      >
+        <i class="ri-font-sans-serif" />
+      </button>
+      <button
+        v-if="has('headingBar')"
+        title="Accent bar on top"
+        :disabled="!editor?.isActive('heading')"
+        :class="{ 'is-active': editor?.isActive('heading', { hlBar: true }) }"
+        @click="editor?.chain().focus().toggleHeadingBar().run()"
+      >
+        <i class="ri-layout-top-line" />
       </button>
 
       <!-- Lists group -->
@@ -464,6 +511,15 @@ function getSelectionData() {
   border-radius: 4px;
 }
 
+.editor-toolbar button:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.editor-toolbar button:disabled:hover {
+  background-color: transparent; /* minimal inverse of the :hover background-color rule */
+}
+
 .editor-separator {
   display: inline-block;
   margin-inline: 1rem;
@@ -542,6 +598,26 @@ h1 { font-size: 1.625em; }
 h2 { font-size: 1.375em; }
 h3 { font-size: 1.25em; }
 h4 { font-size: 1.125em; }
+
+/* --- Heading style preview (mirrors the frontend hl-* contract) --- */
+.hl-serif { font-family: Cambria, Georgia, serif; }
+.hl-sans { font-family: Calibri, Arial, sans-serif; }
+.hl-bar {
+  position: relative;
+  display: inline-block;
+  padding-top: 0.75rem;
+}
+.hl-bar::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  min-width: 40px;
+  max-width: 60px;
+  height: 0.375rem;
+  background-color: #1b868b; /* = frontend --color-green-500 */
+}
 
 p, ul, ol, pre { line-height: 1.5; }
 </style>
