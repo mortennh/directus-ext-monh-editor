@@ -16,20 +16,11 @@
  * Wraps a TipTap editor with a configurable toolbar and three
  * modal dialogs for inserting links, file downloads and form embeds.
  */
-import Link from '@tiptap/extension-link'
-import { TextAlign } from '@tiptap/extension-text-align'
-import { Underline } from '@tiptap/extension-underline'
-import StarterKit from '@tiptap/starter-kit'
 import { EditorContent, useEditor } from '@tiptap/vue-3'
 import { computed, getCurrentInstance, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import FormModal from './components/FormModal.vue'
 import LinkModal from './components/LinkModal.vue'
-import { FileLink } from './formats/file-link-tiptap'
-import { HeadingStyles } from './formats/heading-styles'
-import { Span } from './formats/span-tiptap'
-import { Svg } from './formats/svg-tiptap'
-import { SvgPath } from './formats/svgPath'
-import { TABLE_KIT } from './formats/tables'
+import { editorExtensions } from './formats/extensions'
 
 // ---------------------------------------------------------------------------
 // Props & emits
@@ -115,31 +106,7 @@ const showSep5 = computed(() => [...FORMATTING, ...HEADINGS, ...LISTS, ...ALIGNM
 const modal = ref<ModalType | null>(null)
 
 const editor = useEditor({
-  extensions: [
-    StarterKit,
-    // Heading visual styles: hl-serif / hl-sans / hl-bar classes
-    HeadingStyles,
-    Underline,
-    // Standard <a> links (internal/external with class-based styling)
-    Link.configure({
-      openOnClick: false,
-      HTMLAttributes: { class: 'editor-link' },
-    }),
-    // File-download links rendered as <a data-file-link> with SVG icon
-    FileLink.configure({
-      openOnClick: false,
-      HTMLAttributes: { class: 'editor-link-type-file' },
-    }),
-    // Generic <span> node (used for form-link embeds)
-    Span,
-    // Inline SVG + <path> nodes (used inside FileLink for the doc icon)
-    Svg,
-    SvgPath,
-    TextAlign.configure({ types: ['heading', 'paragraph'] }),
-    // Tables — always loaded (even with the table button hidden), so existing
-    // tables survive editing
-    TABLE_KIT,
-  ],
+  extensions: editorExtensions(),
   onUpdate: ({ editor }) => {
     emit('input', editor.getHTML())
   },
@@ -149,12 +116,12 @@ const editor = useEditor({
 // Directus field value first becomes available.
 onMounted(() => {
   if (props.value)
-    editor.value?.commands.setContent(props.value)
+    editor.value?.commands.setContent(props.value, { emitUpdate: false })
 })
 
 watch(() => props.value, (newValue) => {
   if (newValue)
-    editor.value?.commands.setContent(newValue)
+    editor.value?.commands.setContent(newValue, { emitUpdate: false })
 }, { once: true })
 
 onBeforeUnmount(() => {
@@ -708,4 +675,32 @@ h4 { font-size: 1.125em; }
 }
 
 p, ul, ol, pre { line-height: 1.5; }
+
+/* Preserved legacy markup (formats/html-preserve.ts) */
+.ProseMirror img {
+  max-width: 100%;
+  height: auto;
+}
+.editor-html-embed {
+  margin: 1em 0;
+  padding: 0.5rem 0.75rem;
+  border: 1px dashed var(--theme--form--field--input--border-color);
+  border-radius: var(--theme--border-radius);
+  background-color: var(--background-subdued);
+  color: var(--theme--foreground-subdued);
+  font-size: 0.85em;
+  overflow-wrap: anywhere;
+}
+.editor-html-container {
+  margin: 0.5em 0;
+  padding: 0 0.75rem;
+  border-left: 2px solid var(--theme--form--field--input--border-color);
+}
+.editor-html-container::before {
+  content: '<' attr(data-tag) '>';
+  display: block;
+  padding-top: 0.25rem;
+  color: var(--theme--foreground-subdued);
+  font-size: 0.75em;
+}
 </style>
