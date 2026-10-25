@@ -29,6 +29,7 @@ import { HeadingStyles } from './formats/heading-styles'
 import { Span } from './formats/span-tiptap'
 import { Svg } from './formats/svg-tiptap'
 import { SvgPath } from './formats/svgPath'
+import { TABLE_KIT } from './formats/tables'
 
 // ---------------------------------------------------------------------------
 // Props & emits
@@ -87,6 +88,7 @@ const HEADINGS = ['h1', 'h2', 'h3', 'h4', 'h5', 'fontSerif', 'fontSans', 'headin
 const LISTS = ['bulletList', 'orderedList']
 const ALIGNMENT = ['alignLeft', 'alignCenter', 'alignRight', 'alignJustify']
 const LINKS = ['link', 'fileLink', 'formLink']
+const TABLES = ['table']
 
 /**
  * Returns true when the given toolbar item should be visible.
@@ -103,6 +105,7 @@ const showSep1 = computed(() => FORMATTING.some(has) && HEADINGS.some(has))
 const showSep2 = computed(() => [...FORMATTING, ...HEADINGS].some(has) && LISTS.some(has))
 const showSep3 = computed(() => [...FORMATTING, ...HEADINGS, ...LISTS].some(has) && ALIGNMENT.some(has))
 const showSep4 = computed(() => [...FORMATTING, ...HEADINGS, ...LISTS, ...ALIGNMENT].some(has) && LINKS.some(has))
+const showSep5 = computed(() => [...FORMATTING, ...HEADINGS, ...LISTS, ...ALIGNMENT, ...LINKS].some(has) && TABLES.some(has))
 
 // ---------------------------------------------------------------------------
 // TipTap editor setup
@@ -133,6 +136,9 @@ const editor = useEditor({
     Svg,
     SvgPath,
     TextAlign.configure({ types: ['heading', 'paragraph'] }),
+    // Tables — always loaded (even with the table button hidden), so existing
+    // tables survive editing
+    TABLE_KIT,
   ],
   onUpdate: ({ editor }) => {
     emit('input', editor.getHTML())
@@ -468,6 +474,58 @@ function getSelectionData() {
       >
         <i class="ri-survey-line" />
       </button>
+
+      <!-- Table group: insert; inside a table also rows, columns, header -->
+      <span
+        v-if="showSep5"
+        class="editor-separator"
+      >|</span>
+      <template v-if="has('table')">
+        <button
+          title="Insert table"
+          @click="editor?.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run()"
+        >
+          <i class="ri-table-2" />
+        </button>
+        <template v-if="editor?.isActive('table')">
+          <button
+            title="Add row below"
+            @click="editor?.chain().focus().addRowAfter().run()"
+          >
+            <i class="ri-insert-row-bottom" />
+          </button>
+          <button
+            title="Add column to the right"
+            @click="editor?.chain().focus().addColumnAfter().run()"
+          >
+            <i class="ri-insert-column-right" />
+          </button>
+          <button
+            title="Delete row"
+            @click="editor?.chain().focus().deleteRow().run()"
+          >
+            <i class="ri-delete-row" />
+          </button>
+          <button
+            title="Delete column"
+            @click="editor?.chain().focus().deleteColumn().run()"
+          >
+            <i class="ri-delete-column" />
+          </button>
+          <button
+            title="Header row on/off"
+            @click="editor?.chain().focus().toggleHeaderRow().run()"
+          >
+            <i class="ri-layout-top-line" />
+          </button>
+          <button
+            title="Delete table"
+            @click="editor?.chain().focus().deleteTable().run()"
+          >
+            <i class="ri-delete-bin-line" />
+          </button>
+        </template>
+      </template>
     </div>
 
     <EditorContent :editor="editor" />
@@ -530,6 +588,30 @@ function getSelectionData() {
   display: inline-block;
   margin-inline: 1rem;
   color: var(--theme--form--field--input--border-color);
+}
+
+/* Tables (the site styles them itself; this only makes cells visible here) */
+.ProseMirror table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 1em 0;
+}
+.ProseMirror th,
+.ProseMirror td {
+  border: 1px solid var(--theme--form--field--input--border-color);
+  padding: 6px 8px;
+  vertical-align: top;
+}
+.ProseMirror th {
+  background: var(--theme--background-subdued);
+  font-weight: 600;
+  text-align: left;
+}
+.ProseMirror :is(th, td) > p {
+  margin: 0;
+}
+.ProseMirror .selectedCell {
+  background: var(--theme--primary-background);
 }
 
 /* ProseMirror content area */

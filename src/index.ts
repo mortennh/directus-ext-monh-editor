@@ -57,6 +57,7 @@ export default defineInterface({
             { text: 'Link', value: 'link' },
             { text: 'File Link', value: 'fileLink' },
             { text: 'Form Link', value: 'formLink' },
+            { text: 'Table', value: 'table' },
           ],
         },
       },
