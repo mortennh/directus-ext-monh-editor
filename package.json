@@ -1,7 +1,7 @@
 {
   "name": "monh-editor",
   "type": "module",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "TipTap rich-text editor for Directus with internal linking, file downloads and form embeds",
   "keywords": [
     "directus",

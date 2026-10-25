@@ -51,6 +51,9 @@ function signature(html: string) {
       // are merged, empty ones dropped
       if (tag === 'a' && name === 'href')
         continue
+      // target/rel follow from the address (formats/link.ts)
+      if (tag === 'a' && (name === 'target' || name === 'rel'))
+        continue
       // text-align on paragraphs/headings is re-rendered by TextAlign
       const v = normValue(name, value)
       if (name === 'style') {
