@@ -1,4 +1,4 @@
-import { readdirSync, readFileSync } from 'node:fs'
+import { existsSync, readdirSync, readFileSync } from 'node:fs'
 import { Editor } from '@tiptap/core'
 import { TextAlign } from '@tiptap/extension-text-align'
 import StarterKit from '@tiptap/starter-kit'
@@ -8,7 +8,7 @@ import { TABLE_KIT } from './tables'
 /**
  * The migrated tables (docs/specs/info-cards-migration/*.tables.json) must
  *  survive opening and saving in the editor — editors have to be able to
- *  change them.
+ *  change them. The files live in the TRR repo; skipped elsewhere.
  */
 const DIR = '../../docs/specs/info-cards-migration/'
 const FILES = ['why-esg-reporting', 'how-effective-are-esg-reporting-requirements', 'ski-jumping-lesson-1-more-transparency-fairer-performance-evaluations']
@@ -22,8 +22,10 @@ function roundTrip(html: string): string {
 const text = (html: string) => html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim()
 const count = (html: string, tag: string) => (html.match(new RegExp(`<${tag}[\\s>]`, 'g')) ?? []).length
 
-describe('migrated tables in the editor', () => {
-  for (const file of FILES) {
+const HAS_DATA = existsSync(DIR)
+
+describe.skipIf(!HAS_DATA)('migrated tables in the editor', () => {
+  for (const file of HAS_DATA ? FILES : []) {
     const { tables } = JSON.parse(readFileSync(`${DIR}${file}.tables.json`, 'utf8'))
     for (const t of tables) {
       for (const lang of ['en', 'de']) {
@@ -40,8 +42,8 @@ describe('migrated tables in the editor', () => {
 })
 
 /** Same for the info cards' text and modal details (*.cards.json). */
-describe('migrated info cards in the editor', () => {
-  for (const file of readdirSync(DIR).filter((f: string) => f.endsWith('.cards.json'))) {
+describe.skipIf(!HAS_DATA)('migrated info cards in the editor', () => {
+  for (const file of HAS_DATA ? readdirSync(DIR) : [].filter((f: string) => f.endsWith('.cards.json'))) {
     const { cards } = JSON.parse(readFileSync(`${DIR}${file}`, 'utf8'))
     for (const c of cards) {
       for (const lang of ['en', 'de']) {

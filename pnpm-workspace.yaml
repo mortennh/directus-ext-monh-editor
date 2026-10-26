@@ -1,3 +1,7 @@
+shellEmulator: true
+
+trustPolicy: no-downgrade
+
 # pnpm 11 blocks dependency install scripts by default; these two are needed
 # to build the extension (same allow-list entries as frontend/pnpm-workspace.yaml).
 allowBuilds:
