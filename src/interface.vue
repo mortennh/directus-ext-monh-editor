@@ -41,11 +41,24 @@ const props = defineProps<{
   linkCollections?: string[]
   /** When true, internal links omit the /{lang} prefix */
   disableLangPrefix?: boolean
+  /** Language code whose internal links omit the prefix (defaults to "en-US") */
+  defaultLanguage?: string
+  /** When true, file links are stored as /assets/{id} */
+  relativeFileLinks?: boolean
+  /** Internal link targets (collection, URL path, title field); overrides linkCollections */
+  linkTargets?: LinkTarget[]
 }>()
 
 const emit = defineEmits(['input'])
 
 export type ModalType = 'link' | 'file' | 'form'
+
+/** Internal link target: collection, URL path segment, title field */
+export interface LinkTarget {
+  collection: string
+  path?: string | null
+  titleField?: string | null
+}
 
 // ---------------------------------------------------------------------------
 // Language detection
@@ -244,6 +257,9 @@ function getSelectionData() {
       :current-lang="lang"
       :link-collections="linkCollections"
       :disable-lang-prefix="disableLangPrefix"
+      :default-language="defaultLanguage"
+      :relative-file-links="relativeFileLinks"
+      :link-targets="linkTargets"
       @cancel="modal = null"
       @set-link="onSetLink"
     />
