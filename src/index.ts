@@ -92,6 +92,48 @@ export default defineInterface({
       },
     },
     {
+      // Language whose links get no /{lang} prefix. Defaults to "en-US".
+      field: 'defaultLanguage',
+      name: 'Default Language',
+      type: 'string',
+      meta: {
+        interface: 'input',
+        width: 'half',
+        note: 'Language code whose internal links omit the prefix (e.g. de-DE). Defaults to en-US.',
+        options: { placeholder: 'en-US' },
+      },
+    },
+    {
+      // When checked, file links are stored as /assets/{id} instead of an absolute URL.
+      field: 'relativeFileLinks',
+      name: 'Relative File Links',
+      type: 'boolean',
+      meta: {
+        interface: 'boolean',
+        width: 'half',
+        note: 'Store file links as /assets/{id} (the frontend resolves the host). By default the URL of this Directus instance is used.',
+      },
+    },
+    {
+      // Internal link targets with their URL path and title field. Overrides "Link Collections".
+      field: 'linkTargets',
+      name: 'Link Targets',
+      type: 'json',
+      meta: {
+        interface: 'list',
+        width: 'full',
+        note: 'Collections to search for internal links, with the URL path segment (defaults to the collection name) and the title field (defaults to "title"). Overrides "Link Collections".',
+        options: {
+          template: '{{ collection }} → /{{ path }}',
+          fields: [
+            { field: 'collection', name: 'Collection', type: 'string', meta: { interface: 'input', width: 'third', required: true } },
+            { field: 'path', name: 'Path', type: 'string', meta: { interface: 'input', width: 'third' } },
+            { field: 'titleField', name: 'Title Field', type: 'string', meta: { interface: 'input', width: 'third', options: { placeholder: 'title' } } },
+          ],
+        },
+      },
+    },
+    {
       // Collections to search for internal linking in the link modal.
       field: 'linkCollections',
       name: 'Link Collections',

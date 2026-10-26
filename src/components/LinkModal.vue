@@ -6,7 +6,7 @@
  *   'link' → URL input + link-style picker + internal content search + lang filter
  *   'file' → URL input + link-style picker + file upload/selection from Directus
  */
-import type { ModalType } from '../interface.vue'
+import type { LinkTarget, ModalType } from '../interface.vue'
 import { useApi } from '@directus/extensions-sdk'
 import { useBrowserLocation, useDebounceFn } from '@vueuse/core'
 import { computed, onMounted, ref } from 'vue'
@@ -28,6 +28,12 @@ const props = defineProps<{
   linkCollections?: string[]
   /** When true, internal links omit the /{lang} prefix */
   disableLangPrefix?: boolean
+  /** Language code whose internal links omit the prefix */
+  defaultLanguage?: string
+  /** When true, file links are stored as /assets/{id} */
+  relativeFileLinks?: boolean
+  /** Internal link targets (overrides linkCollections) */
+  linkTargets?: LinkTarget[]
 }>()
 
 const emit = defineEmits<{
@@ -44,6 +50,7 @@ const location = useBrowserLocation()
 
 /** Default language code — links in this language omit the prefix */
 const DEFAULT_LANG = 'en-US'
+const defaultLang = computed(() => props.defaultLanguage || DEFAULT_LANG)
 
 /** Default collections to search for internal linking */
 const DEFAULT_COLLECTIONS = [
@@ -57,10 +64,15 @@ const DEFAULT_COLLECTIONS = [
   'researcher_of_month',
 ]
 
-/** Active collections — from field config or defaults */
+/** Active collections — from link targets, field config or defaults */
 const collections = computed(() => {
+  if (props.linkTargets?.length) {
+    return props.linkTargets
+      .filter(t => t.collection)
+      .map(t => ({ collection: t.collection, path: t.path || t.collection, titleField: t.titleField || 'title' }))
+  }
   const list = props.linkCollections?.length ? props.linkCollections : DEFAULT_COLLECTIONS
-  return list.map(c => ({ collection: c }))
+  return list.map(c => ({ collection: c, path: c, titleField: 'title' }))
 })
 
 // ---------------------------------------------------------------------------
@@ -109,6 +121,8 @@ interface CollectionItem {
   slug: string
   langCode: string | null
   _collection: string
+  /** URL path segment for this item's collection */
+  _path: string
 }
 
 const q = ref('')
@@ -136,8 +150,7 @@ const internalItems = computed(() =>
 async function fetchInternalItems() {
   const results = await Promise.all(
     collections.value.map((col) => {
-      const { collection } = col
-      const titleField = 'title'
+      const { collection, path, titleField } = col
       const slugField = 'slug'
       const translationsRelation = 'translations'
 
@@ -165,6 +178,7 @@ async function fetchInternalItems() {
                 slug: t[slugField],
                 langCode: t.languages_code as string,
                 _collection: collection,
+                _path: path,
               }))
           }))
           .catch(() => [])
@@ -185,6 +199,7 @@ async function fetchInternalItems() {
           slug: item[slugField],
           langCode: null,
           _collection: collection,
+          _path: path,
         })))
         .catch(() => [])
     }),
@@ -207,11 +222,11 @@ const onSearch = useDebounceFn(fetchInternalItems, 200)
 function selectInternalItem(item: CollectionItem) {
   let langPrefix = ''
   if (!props.disableLangPrefix) {
-    const isDefault = item.langCode === DEFAULT_LANG
+    const isDefault = item.langCode === defaultLang.value
     const shortLang = item.langCode ? item.langCode.split('-')[0] : null
     langPrefix = shortLang && !isDefault ? `/${shortLang}` : ''
   }
-  linkItem.url.value = `${langPrefix}/${item._collection}/${item.slug}`
+  linkItem.url.value = `${langPrefix}/${item._path}/${item.slug}`
   linkItem.title.value = item.title
 }
 
@@ -237,7 +252,7 @@ async function fetchFiles() {
 
 /** Populate the URL and title fields from a selected Directus file */
 function selectFile(file: any) {
-  linkItem.url.value = `${location.value.origin}/assets/${file.id}`
+  linkItem.url.value = `${props.relativeFileLinks ? '' : location.value.origin}/assets/${file.id}`
   linkItem.title.value = file.title
   linkItem.filesize.value = file.filesize
   linkItem.type.value = 'file'
